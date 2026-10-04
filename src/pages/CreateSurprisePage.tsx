@@ -292,15 +292,13 @@ export const CreateSurprisePage: React.FC = () => {
         isActive: true,
       };
 
-      await createSurprise(surpriseData);
-      saveCreatedSurprise(generatedSlug);
+      const savedSlug = await createSurprise(surpriseData);
+      saveCreatedSurprise(savedSlug);
       localStorage.removeItem(LOCAL_STORAGE_DRAFT_KEY);
-      navigate(`/surprise/${generatedSlug}/manage`);
+      navigate(`/surprise/${savedSlug}/manage`);
     } catch (err: unknown) {
       console.warn('Publish error recovery:', err);
-      saveCreatedSurprise(generatedSlug);
-      localStorage.removeItem(LOCAL_STORAGE_DRAFT_KEY);
-      navigate(`/surprise/${generatedSlug}/manage`);
+      setPublishError('Could not save this surprise online. Your draft is still here; check your connection and try publishing again.');
     } finally {
       setPublishing(false);
     }

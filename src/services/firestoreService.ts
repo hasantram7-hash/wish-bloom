@@ -191,11 +191,11 @@ export async function createSurprise(
       });
       localSurprise.id = docRef.id;
       saveLocalSurprise(sanitized.slug, localSurprise);
-      return docRef.id;
+      return sanitized.slug;
     } catch (err2) {
       console.warn('Both Firestore write attempts failed, relying on local backup:', err2);
       handleFirestoreError(err2, OperationType.CREATE, COLLECTION_SURPRISES);
-      return localSurprise.id || sanitized.slug;
+      throw err2;
     }
   }
 }
