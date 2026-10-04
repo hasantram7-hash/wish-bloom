@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { MemoryItem } from '../../types/birthday';
 import { validateFile, uploadMediaFile } from '../../services/storageService';
+import { compressImageToBase64 } from '../../utils/imageHelper';
 
 interface PhotoUploaderProps {
   memories: MemoryItem[];
@@ -58,15 +59,25 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         continue;
       }
 
-      // Generate local preview URL
-      const localPreviewUrl = URL.createObjectURL(file);
+      // Generate persistent base64 data URL for images so they never disappear
+      let reliablePreviewUrl = '';
+      if (validation.type === 'image') {
+        try {
+          reliablePreviewUrl = await compressImageToBase64(file);
+        } catch {
+          reliablePreviewUrl = URL.createObjectURL(file);
+        }
+      } else {
+        reliablePreviewUrl = URL.createObjectURL(file);
+      }
+
       const tempId = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const isFirst = memoriesRef.current.length === 0;
 
       const newMemory: MemoryItem = {
         id: tempId,
         storagePath: '',
-        downloadUrl: localPreviewUrl,
+        downloadUrl: reliablePreviewUrl,
         type: validation.type,
         caption: '',
         memoryDate: '',

@@ -1,37 +1,8 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isAllowedImage() {
-      return request.resource.contentType.matches('image/(jpeg|jpg|png|webp)')
-        && request.resource.size <= 5 * 1024 * 1024; // 5 MB max
-    }
-
-    function isAllowedVideo() {
-      return request.resource.contentType.matches('video/(mp4|webm)')
-        && request.resource.size <= 25 * 1024 * 1024; // 25 MB max
-    }
-
-    // Surprises media path: birthday-surprises/{userId}/{surpriseId}/{fileName}
-    match /birthday-surprises/{userId}/{surpriseId}/{fileName} {
-      // Public read so recipients can see the photos and videos
-      allow read: if true;
-
-      // Allow upload for signed in users and creators without requiring login
-      allow write: if (isAllowedImage() || isAllowedVideo());
-
-      // Only authenticated users or folder owners can delete
-      allow delete: if isSignedIn();
-    }
-
-    // Default deny for all other paths
     match /{allPaths=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }

@@ -126,6 +126,7 @@ export interface BirthdaySurprise {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  expiresAt?: string;
   // Extra features
   milestones?: JourneyMilestone[];
   personalLetter?: string;

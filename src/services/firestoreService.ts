@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDoc,
   getDocs,
   updateDoc,
@@ -42,7 +43,7 @@ export function generateRandomSlug(): string {
 
 /**
  * Sanitizes data before saving to Firestore:
- * - Removes DOM File and Blob objects (which crash Firestore addDoc)
+ * - Removes DOM File and Blob objects (which crash Firestore)
  * - Converts undefined values to null or removes them
  */
 export function sanitizeForFirestore<T>(obj: T): T {
@@ -66,7 +67,7 @@ export function sanitizeForFirestore<T>(obj: T): T {
   }
   const clean: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
-    if (key === 'file') continue; // strip local file references
+    if (key === 'file') continue;
     const cleanedVal = sanitizeForFirestore(val);
     if (cleanedVal !== undefined) {
       clean[key] = cleanedVal;
@@ -98,40 +99,104 @@ function getLocalSurprise(slug: string): BirthdaySurprise | null {
 }
 
 /**
- * Creates a new birthday surprise in Firestore with instant local backup
+ * Calculates 24-hour expiration status
+ */
+export function getSurpriseExpiryStatus(surprise: BirthdaySurprise): {
+  isExpired: boolean;
+  remainingMs: number;
+  formattedRemaining: string;
+} {
+  const createdTime = surprise.createdAt ? new Date(surprise.createdAt).getTime() : Date.now();
+  const expiryTime = surprise.expiresAt
+    ? new Date(surprise.expiresAt).getTime()
+    : createdTime + 24 * 60 * 60 * 1000;
+
+  const now = Date.now();
+  const diff = expiryTime - now;
+
+  if (diff <= 0) {
+    return {
+      isExpired: true,
+      remainingMs: 0,
+      formattedRemaining: 'Expired',
+    };
+  }
+
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  return {
+    isExpired: false,
+    remainingMs: diff,
+    formattedRemaining: `${hours}h ${minutes}m left`,
+  };
+}
+
+/**
+ * Creates a new birthday surprise in Firestore with direct slug ID
+ * and 24-hour auto-expiration
  */
 export async function createSurprise(
   surpriseData: Omit<BirthdaySurprise, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<string> {
-  const sanitized = sanitizeForFirestore(surpriseData);
+  const sanitized = sanitizeForFirestore(surpriseData) as BirthdaySurprise;
   const now = new Date().toISOString();
+  // 24 hours celebration window
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-  // Save immediate local copy so the user never gets blocked
+  sanitized.createdAt = now;
+  sanitized.updatedAt = now;
+  sanitized.expiresAt = expiresAt;
+
+  if (!sanitized.specialSettings) {
+    sanitized.specialSettings = {
+      passwordEnabled: false,
+      quizEnabled: false,
+      giftEnabled: false,
+      timeCapsuleEnabled: false,
+      scratchCardEnabled: false,
+      balloonGameEnabled: true,
+      birthdayWheelEnabled: true,
+    };
+  }
+  sanitized.specialSettings.expiresAt = expiresAt;
+
+  // Save immediate local copy so creator has it cached
   const localSurprise: BirthdaySurprise = {
     ...sanitized,
-    id: `local_${sanitized.slug}`,
+    id: sanitized.slug,
     createdAt: now,
     updatedAt: now,
+    expiresAt,
   };
   saveLocalSurprise(sanitized.slug, localSurprise);
 
   try {
-    const surprisesRef = collection(db, COLLECTION_SURPRISES);
-    const docRef = await addDoc(surprisesRef, {
+    // 1. Direct document write with slug as doc ID (ensures instant direct get on all devices)
+    const docRef = doc(db, COLLECTION_SURPRISES, sanitized.slug);
+    await setDoc(docRef, {
       ...sanitized,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-
-    // Update local cache with real firestore ID
-    localSurprise.id = docRef.id;
-    saveLocalSurprise(sanitized.slug, localSurprise);
-    return docRef.id;
-  } catch (error) {
-    console.warn('Firestore remote addDoc failed, relying on local backup:', error);
-    handleFirestoreError(error, OperationType.CREATE, COLLECTION_SURPRISES);
-    // Return local ID so user flow is 100% uninterrupted
-    return localSurprise.id || localSurprise.slug || `local_${Date.now()}`;
+    return sanitized.slug;
+  } catch (err1) {
+    console.warn('Direct setDoc write failed, attempting addDoc fallback:', err1);
+    try {
+      const surprisesRef = collection(db, COLLECTION_SURPRISES);
+      const docRef = await addDoc(surprisesRef, {
+        ...sanitized,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      localSurprise.id = docRef.id;
+      saveLocalSurprise(sanitized.slug, localSurprise);
+      return docRef.id;
+    } catch (err2) {
+      console.warn('Both Firestore write attempts failed, relying on local backup:', err2);
+      handleFirestoreError(err2, OperationType.CREATE, COLLECTION_SURPRISES);
+      return localSurprise.id || sanitized.slug;
+    }
   }
 }
 
@@ -145,7 +210,6 @@ export async function updateSurprise(
   const sanitized = sanitizeForFirestore(updates);
   const docPath = `${COLLECTION_SURPRISES}/${surpriseId}`;
 
-  // Update local storage backup if available
   if (updates.slug) {
     const local = getLocalSurprise(updates.slug);
     if (local) {
@@ -167,35 +231,36 @@ export async function updateSurprise(
 
 /**
  * Fetches a surprise by its unique share slug
+ * Tries direct document lookup, then query fallback, then local backup
  */
 export async function getSurpriseBySlug(slug: string): Promise<BirthdaySurprise | null> {
-  const path = COLLECTION_SURPRISES;
   try {
+    // 1. Direct document lookup by slug (super fast, never blocked by query permissions!)
+    const directDocRef = doc(db, COLLECTION_SURPRISES, slug);
+    const directSnap = await getDoc(directDocRef);
+    if (directSnap.exists()) {
+      const data = { id: directSnap.id, ...directSnap.data() } as BirthdaySurprise;
+      saveLocalSurprise(slug, data);
+      return data;
+    }
+
+    // 2. Query fallback for surprises saved with random auto-IDs
     const q = query(
       collection(db, COLLECTION_SURPRISES),
-      where('slug', '==', slug),
-      where('isActive', '==', true)
+      where('slug', '==', slug)
     );
     const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      const qAll = query(collection(db, COLLECTION_SURPRISES), where('slug', '==', slug));
-      const allSnap = await getDocs(qAll);
-      if (allSnap.empty) {
-        // Fallback to local storage if Firestore has no record
-        return getLocalSurprise(slug);
-      }
-      const docData = allSnap.docs[0];
-      const result = { id: docData.id, ...docData.data() } as BirthdaySurprise;
-      saveLocalSurprise(slug, result);
-      return result;
+    if (!snapshot.empty) {
+      const docData = snapshot.docs[0];
+      const data = { id: docData.id, ...docData.data() } as BirthdaySurprise;
+      saveLocalSurprise(slug, data);
+      return data;
     }
-    const docData = snapshot.docs[0];
-    const result = { id: docData.id, ...docData.data() } as BirthdaySurprise;
-    saveLocalSurprise(slug, result);
-    return result;
+
+    // 3. Fallback to local storage (if on creator device)
+    return getLocalSurprise(slug);
   } catch (error) {
-    console.warn('Firestore getSurpriseBySlug failed, falling back to local storage:', error);
-    handleFirestoreError(error, OperationType.LIST, path);
+    console.warn('Firestore getSurpriseBySlug failed, checking local storage:', error);
     return getLocalSurprise(slug);
   }
 }
@@ -208,11 +273,13 @@ export async function getSurpriseById(surpriseId: string): Promise<BirthdaySurpr
   try {
     const docRef = doc(db, COLLECTION_SURPRISES, surpriseId);
     const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
+    if (!snap.exists()) {
+      return getLocalSurprise(surpriseId);
+    }
     return { id: snap.id, ...snap.data() } as BirthdaySurprise;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, docPath);
-    return null;
+    return getLocalSurprise(surpriseId);
   }
 }
 

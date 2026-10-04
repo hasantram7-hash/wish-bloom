@@ -3,16 +3,22 @@ import confetti from 'canvas-confetti';
 import {
   Volume2,
   VolumeX,
-  Play,
-  Pause,
   RotateCcw,
   Sparkles,
   Heart,
   Lock,
   ArrowRight,
+  ArrowLeft,
   Gift,
   Film,
   Share2,
+  BookOpen,
+  ListFilter,
+  CheckCircle2,
+  Smile,
+  ChevronRight,
+  ChevronLeft,
+  Clock,
 } from 'lucide-react';
 import { BirthdaySurprise } from '../../types/birthday';
 import { RealisticCakeConfig } from '../../types/cake';
@@ -21,29 +27,41 @@ import { MemoryGallery } from '../gallery/MemoryGallery';
 import { ReactionBar } from '../reactions/ReactionBar';
 import { Guestbook } from '../guestbook/Guestbook';
 import { SpecialFeatures } from './SpecialFeatures';
-import { MemoryJourney } from './MemoryJourney';
 import { ShareActions } from '../share/ShareActions';
 import { recordSurpriseView } from '../../services/firestoreService';
 
 interface BirthdayRevealProps {
   surprise: BirthdaySurprise;
   isPreview?: boolean;
+  remainingTimeStr?: string;
 }
+
+const CHAPTERS = [
+  { id: 1, title: 'Birthday Cake & Wish', icon: '🎂' },
+  { id: 2, title: 'Heartfelt Words & Reasons', icon: '💖' },
+  { id: 3, title: 'Memory Journey', icon: '📸' },
+  { id: 4, title: 'Fun & Birthday Games', icon: '🎈' },
+  { id: 5, title: 'Personal Keepsake Letter', icon: '💌' },
+  { id: 6, title: 'Guestbook & Love', icon: '🎉' },
+];
 
 export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
   surprise,
   isPreview = false,
+  remainingTimeStr = '24h left',
 }) => {
   const [isRevealed, setIsRevealed] = useState(false);
+  const [currentChapter, setCurrentChapter] = useState(1);
+  const [viewMode, setViewMode] = useState<'story' | 'scroll'>('story');
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioMuted, setAudioMuted] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordUnlocked, setPasswordUnlocked] = useState(!surprise.specialSettings?.passwordEnabled);
   const [passwordError, setPasswordError] = useState(false);
-  const [hiddenNoteUnlocked, setHiddenNoteUnlocked] = useState(false);
-  const [cakeSliced, setCakeSliced] = useState(false);
+  const [candlesBlownOut, setCandlesBlownOut] = useState(false);
+  const [activeReasonIndex, setActiveReasonIndex] = useState(0);
 
-  // Audio synthesis or safe royalty-free audio context
+  // Audio synthesis
   const audioContextRef = useRef<AudioContext | null>(null);
 
   // Record view on recipient open
@@ -52,6 +70,20 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
       recordSurpriseView(surprise.id);
     }
   }, [isPreview, surprise.id, isRevealed]);
+
+  // Keyboard navigation for story mode
+  useEffect(() => {
+    if (!isRevealed || viewMode !== 'story') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' && currentChapter < CHAPTERS.length) {
+        goToChapter(currentChapter + 1);
+      } else if (e.key === 'ArrowLeft' && currentChapter > 1) {
+        goToChapter(currentChapter - 1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRevealed, viewMode, currentChapter]);
 
   // Cheerful soft birthday synth chime melody
   const playSynthesizedBirthdayMelody = () => {
@@ -86,16 +118,17 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
         delay += durations[i] * 0.7;
       });
     } catch (e) {
-      console.warn('Audio playback not supported or user interaction needed:', e);
+      console.warn('Audio playback not supported:', e);
     }
   };
 
   const handleReveal = () => {
     setIsRevealed(true);
+    setCurrentChapter(1);
 
     confetti({
-      particleCount: 80,
-      spread: 90,
+      particleCount: 90,
+      spread: 100,
       origin: { y: 0.6 },
       colors: ['#F59E0B', '#EC4899', '#8B5CF6', '#10B981', '#38BDF8'],
     });
@@ -106,15 +139,17 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
     }
   };
 
-  const replayCelebration = () => {
+  const goToChapter = (chapterNum: number) => {
+    setCurrentChapter(chapterNum);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Subtle celebration pop between chapters
     confetti({
-      particleCount: 100,
-      spread: 100,
-      origin: { y: 0.5 },
+      particleCount: 25,
+      spread: 60,
+      origin: { y: 0.8 },
+      colors: ['#F59E0B', '#EC4899', '#8B5CF6'],
     });
-    if (surprise.music?.enabled) {
-      playSynthesizedBirthdayMelody();
-    }
   };
 
   const toggleAudio = () => {
@@ -133,9 +168,6 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
     setAudioMuted((prev) => !prev);
   };
 
-  const heroPhoto = surprise.memories?.find((m) => m.isHero) || surprise.memories?.[0];
-  const videoMemory = surprise.memories?.find((m) => m.type === 'video');
-
   const theme = surprise.theme || {
     primaryColor: '#F59E0B',
     secondaryColor: '#EC4899',
@@ -145,7 +177,9 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
     backgroundType: 'gradient',
   };
 
-  // Convert or merge cake config into RealisticCakeConfig
+  const heroPhoto = surprise.memories?.find((m) => m.isHero) || surprise.memories?.[0];
+
+  // Cake Config
   const cakeConfig: RealisticCakeConfig = {
     enabled: true,
     style: (surprise.cake as any)?.style || 'luxury_floral',
@@ -267,8 +301,14 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
               A birthday surprise is waiting for you…
             </h1>
             <p className="text-sm text-slate-400">
-              Crafted with deep love and unforgettable memories by {surprise.senderName}
+              Crafted with deep love and unforgettable memories by <strong>{surprise.senderName}</strong>
             </p>
+          </div>
+
+          {/* 24-Hour Expiry Indicator */}
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-white/10 text-xs text-amber-300 font-medium">
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <span>24-Hour Celebration Window • {remainingTimeStr}</span>
           </div>
 
           <button
@@ -276,11 +316,13 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
             onClick={handleReveal}
             className="w-full py-4 px-8 rounded-full text-base sm:text-lg font-bold text-slate-950 bg-gradient-to-r from-amber-400 via-amber-300 to-rose-400 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-amber-500/25 flex items-center justify-center gap-3 cursor-pointer"
           >
-            <span>Tap to Open Your Surprise</span>
+            <span>Tap to Open Your Surprise ✨</span>
             <ArrowRight className="w-5 h-5" />
           </button>
 
-          <p className="text-[11px] text-slate-500">Best experienced with sound enabled 🎶</p>
+          <p className="text-[11px] text-slate-500">
+            Interactive Chapter Experience • Made with ❤️ by RAM
+          </p>
         </div>
       </div>
     );
@@ -288,265 +330,629 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
 
   // 3. Cinematic Revealed Experience
   return (
-    <div className={`min-h-screen ${getBackgroundStyle()} text-slate-100 relative pb-20`}>
-      {/* Floating Audio Controls */}
-      <div className="fixed top-4 right-4 z-40 flex items-center gap-2 bg-slate-900/80 backdrop-blur-md border border-white/15 p-1.5 rounded-full shadow-lg">
-        {surprise.music?.enabled && (
-          <>
-            <button
-              type="button"
-              onClick={toggleAudio}
-              className="p-2 rounded-full text-slate-300 hover:text-white transition cursor-pointer"
-              title={audioPlaying ? 'Pause Melody' : 'Play Melody'}
-            >
-              {audioPlaying ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4" />}
-            </button>
-            <button
-              type="button"
-              onClick={toggleMute}
-              className="p-2 rounded-full text-slate-300 hover:text-white transition cursor-pointer"
-              title={audioMuted ? 'Unmute' : 'Mute'}
-            >
-              {audioMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-slate-300" />}
-            </button>
-          </>
-        )}
-        <button
-          type="button"
-          onClick={replayCelebration}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/40 transition cursor-pointer"
-          title="Replay Celebration Confetti"
-        >
-          <RotateCcw className="w-3.5 h-3.5" /> Replay
-        </button>
-      </div>
-
-      {/* Main Content Container */}
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 space-y-16">
-        {/* HERO GREETING HEADER */}
-        <header className="text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold tracking-wide">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{surprise.relationship} Birthday Special</span>
+    <div className={`min-h-screen ${getBackgroundStyle()} text-slate-100 relative pb-28`}>
+      {/* Top Floating Header & Controls */}
+      <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 px-4 py-3">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+          {/* Brand & Recipient Title */}
+          <div className="flex items-center gap-2 truncate">
+            <span className="text-base sm:text-lg font-black text-white truncate">
+              {surprise.recipientName}'s Universe 🎉
+            </span>
+            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-amber-300 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20 font-medium">
+              <Clock className="w-3 h-3 text-amber-400" /> {remainingTimeStr}
+            </span>
           </div>
 
-          <h1 className="text-4xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-rose-200 to-amber-400 leading-tight">
-            Happy Birthday, {surprise.recipientName}! 🎉
-          </h1>
+          {/* Mode Toggle & Audio Controls */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* View Mode Toggle: Story Mode vs Scroll Mode */}
+            <div className="flex items-center bg-slate-900 border border-white/10 rounded-full p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode('story')}
+                className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer ${
+                  viewMode === 'story'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <BookOpen className="w-3 h-3" />
+                <span className="hidden sm:inline">Story Mode</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('scroll')}
+                className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer ${
+                  viewMode === 'scroll'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <ListFilter className="w-3 h-3" />
+                <span className="hidden sm:inline">Scroll View</span>
+              </button>
+            </div>
 
-          {surprise.recipientNickname && (
-            <p className="text-base sm:text-lg text-pink-300 font-caveat tracking-wider">
-              aka "{surprise.recipientNickname}"
-            </p>
-          )}
+            {/* Audio Toggle */}
+            {surprise.music?.enabled && (
+              <button
+                type="button"
+                onClick={toggleAudio}
+                className="p-2 rounded-full bg-slate-900 border border-white/10 text-slate-300 hover:text-white transition cursor-pointer shadow-md"
+                title={audioPlaying ? 'Mute' : 'Play Music'}
+              >
+                {audioPlaying ? <Volume2 className="w-4 h-4 text-amber-400" /> : <VolumeX className="w-4 h-4" />}
+              </button>
+            )}
+          </div>
+        </div>
 
-          {surprise.customTitle && (
-            <p className="text-lg sm:text-xl font-medium text-slate-300 max-w-xl mx-auto">
-              {surprise.customTitle}
-            </p>
-          )}
-        </header>
+        {/* Story Mode Chapter Tabs */}
+        {viewMode === 'story' && (
+          <div className="max-w-5xl mx-auto pt-2.5 pb-1 flex items-center justify-between gap-1 overflow-x-auto scrollbar-none">
+            {CHAPTERS.map((ch) => {
+              const isActive = currentChapter === ch.id;
+              const isPast = currentChapter > ch.id;
+              return (
+                <button
+                  key={ch.id}
+                  type="button"
+                  onClick={() => goToChapter(ch.id)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                    isActive
+                      ? 'bg-gradient-to-r from-amber-400 to-rose-400 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                      : isPast
+                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+                      : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-white/5'
+                  }`}
+                >
+                  <span>{ch.icon}</span>
+                  <span className="hidden md:inline">{ch.title}</span>
+                  <span className="md:hidden">Ch {ch.id}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </header>
 
-        {/* HERO PHOTO DISPLAY */}
-        {heroPhoto && (
-          <div className="relative max-w-lg mx-auto rounded-3xl overflow-hidden shadow-2xl border-4 border-white/20 bg-slate-900 group">
-            <img
-              src={heroPhoto.downloadUrl}
-              alt={heroPhoto.caption || surprise.recipientName}
-              className="w-full h-auto max-h-[460px] object-cover"
-            />
-            {heroPhoto.caption && (
-              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 sm:p-6 text-center">
-                <p className="text-white text-base sm:text-lg font-caveat">
-                  "{heroPhoto.caption}"
-                </p>
+      {/* MAIN CONTENT AREA */}
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
+
+        {/* ========================================================= */}
+        {/* STORY MODE: CHAPTER-BY-CHAPTER WITH SMOOTH TRANSITIONS   */}
+        {/* ========================================================= */}
+        {viewMode === 'story' && (
+          <div className="space-y-8 animate-fade-in">
+            {/* CHAPTER 1: BIRTHDAY CAKE & MAKE A WISH */}
+            {currentChapter === 1 && (
+              <div className="space-y-8 text-center animate-scale-up">
+                <div className="space-y-3">
+                  <span className="text-xs uppercase tracking-widest font-bold text-amber-400 bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/20">
+                    Chapter 1 • The Birthday Moment
+                  </span>
+                  <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+                    Happy Birthday, {surprise.recipientName}! 🎂
+                  </h1>
+                  <p className="text-sm sm:text-base text-slate-300 max-w-lg mx-auto leading-relaxed font-outfit">
+                    Close your eyes, make a heartfelt wish, and blow out your birthday candles!
+                  </p>
+                </div>
+
+                {/* 3D Realistic Cake Scene */}
+                <div className="p-4 sm:p-8 rounded-3xl bg-slate-950/60 border border-white/10 shadow-2xl backdrop-blur-md relative overflow-hidden">
+                  <CakeScene
+                    config={cakeConfig}
+                    recipientName={surprise.recipientName}
+                    onCandlesBlown={() => {
+                      setCandlesBlownOut(true);
+                      confetti({ particleCount: 70, spread: 80, origin: { y: 0.7 } });
+                    }}
+                    reward={cakeConfig.memorySliceReward}
+                  />
+                </div>
+
+                {/* Continue to Next Chapter Button */}
+                <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(2)}
+                    className="w-full sm:w-auto px-8 py-4 rounded-full font-bold text-sm uppercase tracking-wider text-slate-950 bg-gradient-to-r from-amber-400 via-rose-400 to-amber-300 hover:scale-105 active:scale-95 shadow-xl shadow-amber-500/25 transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>Next: Heartfelt Wishes & Reasons 💖</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* CHAPTER 2: HEARTFELT WISHES & REASONS WHY YOU'RE AMAZING */}
+            {currentChapter === 2 && (
+              <div className="space-y-8 animate-scale-up">
+                <div className="text-center space-y-2">
+                  <span className="text-xs uppercase tracking-widest font-bold text-pink-400 bg-pink-500/10 px-4 py-1.5 rounded-full border border-pink-500/20">
+                    Chapter 2 • Words from the Heart
+                  </span>
+                  <h2 className="text-2xl sm:text-4xl font-black text-white">
+                    Why You Make the World Brighter 🌟
+                  </h2>
+                </div>
+
+                {/* Primary Message Card */}
+                <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/90 border border-white/15 shadow-2xl space-y-4 text-center sm:text-left">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+                      Message from {surprise.senderName}
+                    </span>
+                    <Heart className="w-5 h-5 text-rose-500 fill-current" />
+                  </div>
+                  <p className="text-base sm:text-xl text-slate-200 leading-relaxed font-outfit">
+                    "{surprise.message}"
+                  </p>
+                  {surprise.quote && (
+                    <blockquote className="pt-3 border-t border-white/5 text-xs sm:text-sm italic text-amber-300/90">
+                      “{surprise.quote}”
+                    </blockquote>
+                  )}
+                </div>
+
+                {/* Interactive Reasons Why You're Special */}
+                {surprise.reasons && surprise.reasons.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-bold text-white text-center">
+                      Reasons Why You Are Loved So Much:
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {surprise.reasons.map((reason, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            confetti({ particleCount: 20, spread: 45, origin: { y: 0.7 } });
+                          }}
+                          className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-white/10 hover:border-amber-400/40 transition shadow-lg space-y-2 cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-xs">
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs font-bold text-amber-300 group-hover:text-amber-200">
+                              Special Quality #{idx + 1}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-200 leading-relaxed font-outfit">
+                            {reason}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Wishes Cards */}
+                {surprise.wishes && surprise.wishes.length > 0 && (
+                  <div className="p-6 rounded-3xl bg-amber-500/10 border border-amber-500/20 space-y-3">
+                    <h4 className="text-xs uppercase tracking-wider font-bold text-amber-400 text-center">
+                      Warm Birthday Blessings for Your Year Ahead:
+                    </h4>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {surprise.wishes.map((wish, i) => (
+                        <span
+                          key={i}
+                          className="px-4 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-xs sm:text-sm text-slate-200 font-medium"
+                        >
+                          ✨ {wish}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Navigation Buttons */}
+                <div className="pt-6 flex items-center justify-between gap-4">
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(1)}
+                    className="flex items-center gap-1.5 px-6 py-3 rounded-full text-xs font-semibold text-slate-400 hover:text-white bg-slate-900 border border-white/10 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Previous (Cake)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(3)}
+                    className="flex items-center gap-1.5 px-7 py-3 rounded-full text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-rose-400 hover:from-amber-300 hover:to-rose-300 transition shadow-lg shadow-amber-500/20 cursor-pointer"
+                  >
+                    Next: Photo Memories 📸 <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* CHAPTER 3: MEMORY JOURNEY (PHOTOS & VIDEOS) */}
+            {currentChapter === 3 && (
+              <div className="space-y-8 animate-scale-up">
+                <div className="text-center space-y-2">
+                  <span className="text-xs uppercase tracking-widest font-bold text-sky-400 bg-sky-500/10 px-4 py-1.5 rounded-full border border-sky-500/20">
+                    Chapter 3 • Walk Down Memory Lane
+                  </span>
+                  <h2 className="text-2xl sm:text-4xl font-black text-white">
+                    Unforgettable Moments Together 📸
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Tap any photo to view full size in the celebration lightbox
+                  </p>
+                </div>
+
+                {/* Hero Photo Spotlight if available */}
+                {heroPhoto && (
+                  <div className="p-4 sm:p-6 rounded-3xl bg-slate-900/90 border border-amber-500/30 text-center space-y-3 shadow-2xl relative overflow-hidden">
+                    <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-[11px] font-bold">
+                      <Sparkles className="w-3.5 h-3.5" /> Featured Hero Memory
+                    </div>
+                    <div className="max-w-md mx-auto rounded-2xl overflow-hidden shadow-2xl border border-white/10">
+                      <img
+                        src={heroPhoto.downloadUrl}
+                        alt="Hero Birthday Memory"
+                        className="w-full h-72 sm:h-96 object-cover object-center hover:scale-105 transition-transform duration-500"
+                      />
+                    </div>
+                    {heroPhoto.caption && (
+                      <p className="text-sm font-semibold text-slate-200 font-caveat text-xl">
+                        "{heroPhoto.caption}"
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Full Responsive Memory Gallery */}
+                <div className="p-4 sm:p-6 rounded-3xl bg-slate-950/60 border border-white/10 shadow-xl">
+                  <MemoryGallery
+                    memories={surprise.memories || []}
+                    polaroidStyle={theme.toggles?.polaroidStyle}
+                    accentColor={theme.primaryColor}
+                  />
+                </div>
+
+                {/* Navigation Buttons */}
+                <div className="pt-6 flex items-center justify-between gap-4">
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(2)}
+                    className="flex items-center gap-1.5 px-6 py-3 rounded-full text-xs font-semibold text-slate-400 hover:text-white bg-slate-900 border border-white/10 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Previous (Wishes)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(4)}
+                    className="flex items-center gap-1.5 px-7 py-3 rounded-full text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-rose-400 hover:from-amber-300 hover:to-rose-300 transition shadow-lg shadow-amber-500/20 cursor-pointer"
+                  >
+                    Next: Fun & Games 🎈 <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* CHAPTER 4: INTERACTIVE BIRTHDAY GAMES */}
+            {currentChapter === 4 && (
+              <div className="space-y-8 animate-scale-up">
+                <div className="text-center space-y-2">
+                  <span className="text-xs uppercase tracking-widest font-bold text-emerald-400 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20">
+                    Chapter 4 • Birthday Games & Fun
+                  </span>
+                  <h2 className="text-2xl sm:text-4xl font-black text-white">
+                    Interactive Birthday Activities 🎈
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Pop balloons for cheerful blessings and spin the birthday destiny wheel!
+                  </p>
+                </div>
+
+                {/* Special Games Component */}
+                <div className="p-4 sm:p-6 rounded-3xl bg-slate-900/90 border border-white/10 shadow-2xl">
+                  <SpecialFeatures
+                    specialSettings={surprise.specialSettings}
+                    accentColor={theme.primaryColor}
+                  />
+                </div>
+
+                {/* Navigation Buttons */}
+                <div className="pt-6 flex items-center justify-between gap-4">
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(3)}
+                    className="flex items-center gap-1.5 px-6 py-3 rounded-full text-xs font-semibold text-slate-400 hover:text-white bg-slate-900 border border-white/10 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Previous (Photos)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(5)}
+                    className="flex items-center gap-1.5 px-7 py-3 rounded-full text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-rose-400 hover:from-amber-300 hover:to-rose-300 transition shadow-lg shadow-amber-500/20 cursor-pointer"
+                  >
+                    Next: Secret Keepsake Letter 💌 <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* CHAPTER 5: PERSONAL LETTER & SECRET NOTE */}
+            {currentChapter === 5 && (
+              <div className="space-y-8 animate-scale-up">
+                <div className="text-center space-y-2">
+                  <span className="text-xs uppercase tracking-widest font-bold text-purple-400 bg-purple-500/10 px-4 py-1.5 rounded-full border border-purple-500/20">
+                    Chapter 5 • From {surprise.senderName}
+                  </span>
+                  <h2 className="text-2xl sm:text-4xl font-black text-white">
+                    A Keepsake Letter For You 💌
+                  </h2>
+                </div>
+
+                {/* Luxury Letter Box */}
+                <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-amber-500/30 shadow-2xl relative space-y-6">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                    <span className="text-xs uppercase tracking-widest text-amber-400 font-bold">
+                      Personal Note
+                    </span>
+                    <Heart className="w-5 h-5 text-rose-500 fill-current animate-pulse" />
+                  </div>
+
+                  <p className="text-base sm:text-xl text-slate-200 leading-relaxed font-outfit whitespace-pre-line">
+                    {surprise.personalLetter ||
+                      "Looking back at everything we've shared, I couldn't have asked for a truer, kinder, more inspiring soul in my life. Thank you for every late-night conversation, every celebration, and for standing by me through thick and thin. Here is to another year of dreams turning into reality!"}
+                  </p>
+
+                  <div className="pt-6 border-t border-white/10 text-right">
+                    <p className="text-xs text-slate-400 uppercase tracking-widest">With boundless love,</p>
+                    <p className="text-3xl font-caveat font-bold text-amber-300 pt-1">
+                      {surprise.senderName} ❤️
+                    </p>
+                  </div>
+                </div>
+
+                {/* Navigation Buttons */}
+                <div className="pt-6 flex items-center justify-between gap-4">
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(4)}
+                    className="flex items-center gap-1.5 px-6 py-3 rounded-full text-xs font-semibold text-slate-400 hover:text-white bg-slate-900 border border-white/10 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Previous (Games)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(6)}
+                    className="flex items-center gap-1.5 px-7 py-3 rounded-full text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-rose-400 hover:from-amber-300 hover:to-rose-300 transition shadow-lg shadow-amber-500/20 cursor-pointer"
+                  >
+                    Final Chapter: Guestbook & Share 🎉 <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* CHAPTER 6: GUESTBOOK, REACTIONS & SOCIAL SHARE */}
+            {currentChapter === 6 && (
+              <div className="space-y-8 animate-scale-up">
+                <div className="text-center space-y-2">
+                  <span className="text-xs uppercase tracking-widest font-bold text-amber-400 bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/20">
+                    Final Chapter • Celebration Hub
+                  </span>
+                  <h2 className="text-2xl sm:text-4xl font-black text-white">
+                    Send Love & Share the Magic 🎉
+                  </h2>
+                </div>
+
+                {/* Reactions */}
+                <div className="p-6 rounded-3xl bg-slate-900/90 border border-white/10 text-center space-y-3">
+                  <p className="text-xs uppercase tracking-wider font-semibold text-slate-400">
+                    Send Instant Birthday Love
+                  </p>
+                  <ReactionBar surpriseId={surprise.id || 'preview'} reactions={surprise.reactions} />
+                </div>
+
+                {/* Guestbook */}
+                {surprise.guestbookEnabled && (
+                  <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/90 border border-white/10">
+                    <Guestbook surpriseId={surprise.id || 'preview'} accentColor={theme.primaryColor} />
+                  </div>
+                )}
+
+                {/* Social Share Options (WhatsApp, Instagram, etc.) */}
+                <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/90 border border-white/10 space-y-4">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-lg font-bold text-white flex items-center justify-center gap-2">
+                      <Share2 className="w-5 h-5 text-amber-400" /> Share this Birthday Surprise
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Share with family & friends via WhatsApp, Instagram, Telegram & more!
+                    </p>
+                  </div>
+                  <ShareActions
+                    slug={surprise.slug}
+                    recipientName={surprise.recipientName}
+                    senderName={surprise.senderName}
+                  />
+                </div>
+
+                {/* Restart Story / Made by RAM Footer */}
+                <div className="text-center pt-6 space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(1)}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-white/15 transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4 text-amber-400" /> Replay Birthday Story From Chapter 1
+                  </button>
+
+                  <div className="pt-2 flex flex-col items-center justify-center gap-1">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-amber-500/30 text-xs text-amber-300 font-semibold shadow-lg shadow-amber-500/10">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Made with ❤️ by RAM</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Turn a birthday wish into a whole universe with WishVerse
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* REALISTIC 3D BAKERY CAKE SCENE (Candle Blow + Cake Cut) */}
-        <section aria-label="Birthday Cake Experience" className="py-4">
-          <CakeScene
-            config={cakeConfig}
-            recipientName={surprise.recipientName}
-            onCandlesBlown={() => setHiddenNoteUnlocked(true)}
-            onCakeSliced={() => setCakeSliced(true)}
-          />
-        </section>
-
-        {/* VIDEO MESSAGE WALL (Optional) */}
-        {(videoMemory || surprise.videoMessageUrl) && (
-          <section className="bg-slate-900/90 border border-white/15 rounded-3xl p-6 sm:p-8 backdrop-blur-md shadow-2xl space-y-4">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-pink-400">
-              <Film className="w-4 h-4" />
-              <span>A Video Message From {surprise.senderName}</span>
-            </div>
-            <div className="relative aspect-video rounded-2xl overflow-hidden bg-black border border-white/10 shadow-lg">
-              <video
-                src={videoMemory?.downloadUrl || surprise.videoMessageUrl}
-                controls
-                preload="metadata"
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </section>
-        )}
-
-        {/* HEARTFELT MESSAGE CARD */}
-        <section className="bg-slate-900/90 border border-white/15 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-md relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 text-amber-500/10 pointer-events-none select-none text-8xl font-serif">
-            “
-          </div>
-
-          <div className="relative space-y-4">
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-widest">
-              <Heart className="w-4 h-4 fill-current text-rose-500" />
-              <span>A Personal Message for You</span>
-            </div>
-
-            <p className="text-base sm:text-lg text-slate-200 leading-relaxed font-outfit whitespace-pre-wrap">
-              {surprise.message}
-            </p>
-
-            {surprise.quote && (
-              <div className="pt-4 border-t border-white/10">
-                <p className="text-sm sm:text-base italic text-amber-200 font-serif">
-                  — "{surprise.quote}"
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* BEST FRIEND MEMORY JOURNEY TIMELINE */}
-        <section className="py-2">
-          <MemoryJourney
-            recipientName={surprise.recipientName}
-            senderName={surprise.senderName}
-            milestones={surprise.milestones}
-            personalLetter={surprise.personalLetter}
-          />
-        </section>
-
-        {/* REASONS YOU ARE AMAZING */}
-        {surprise.reasons && surprise.reasons.length > 0 && (
-          <section className="space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Reasons You Are Truly Amazing ✨
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Just a few of the million things that make you so special
+        {/* ========================================================= */}
+        {/* SCROLL VIEW (Traditional Long-Page Mode for Fast Browsing) */}
+        {/* ========================================================= */}
+        {viewMode === 'scroll' && (
+          <div className="space-y-16 animate-fade-in">
+            {/* Header */}
+            <div className="text-center space-y-3">
+              <span className="text-xs uppercase tracking-widest font-bold text-amber-400 bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/20">
+                Birthday Universe for {surprise.recipientName}
+              </span>
+              <h1 className="text-3xl sm:text-5xl font-black text-white">
+                Happy Birthday, {surprise.recipientName}! 🎂
+              </h1>
+              <p className="text-sm sm:text-base text-slate-300 max-w-lg mx-auto leading-relaxed font-outfit">
+                Crafted with boundless love by {surprise.senderName}
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              {surprise.reasons.map((reason, index) => (
-                <div
-                  key={index}
-                  className="flex items-start gap-3 p-4 rounded-2xl bg-slate-900/70 border border-white/10 shadow-lg hover:border-amber-400/40 transition-colors"
-                >
-                  <span className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs flex items-center justify-center shrink-0">
-                    {index + 1}
-                  </span>
-                  <p className="text-sm text-slate-200 leading-relaxed">{reason}</p>
+            {/* Cake Scene */}
+            <section className="p-4 sm:p-8 rounded-3xl bg-slate-950/60 border border-white/10 shadow-2xl">
+              <CakeScene
+                config={cakeConfig}
+                recipientName={surprise.recipientName}
+                onCandlesBlown={() => {
+                  confetti({ particleCount: 70, spread: 80, origin: { y: 0.7 } });
+                }}
+                reward={cakeConfig.memorySliceReward}
+              />
+            </section>
+
+            {/* Heartfelt Message */}
+            <section className="p-6 sm:p-8 rounded-3xl bg-slate-900/90 border border-white/15 space-y-4">
+              <h3 className="text-xl font-bold text-white">A Birthday Message:</h3>
+              <p className="text-base sm:text-xl text-slate-200 leading-relaxed font-outfit">
+                "{surprise.message}"
+              </p>
+              {surprise.quote && (
+                <blockquote className="pt-2 text-xs sm:text-sm italic text-amber-300/90 border-t border-white/5">
+                  “{surprise.quote}”
+                </blockquote>
+              )}
+            </section>
+
+            {/* Reasons */}
+            {surprise.reasons && surprise.reasons.length > 0 && (
+              <section className="space-y-4">
+                <h3 className="text-xl font-bold text-white text-center">Reasons Why You Are Special:</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {surprise.reasons.map((r, i) => (
+                    <div key={i} className="p-5 rounded-2xl bg-slate-900 border border-white/10 space-y-1">
+                      <span className="text-xs font-bold text-amber-400">#{i + 1}</span>
+                      <p className="text-sm text-slate-200 font-outfit">{r}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+              </section>
+            )}
 
-        {/* MEMORY GALLERY */}
-        {surprise.memories && surprise.memories.length > 1 && (
-          <section className="space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Our Precious Memories 📸
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">Click any photo to view in full screen</p>
-            </div>
+            {/* Memories */}
+            <section className="space-y-4">
+              <h3 className="text-xl font-bold text-white text-center">Memory Gallery 📸</h3>
+              <MemoryGallery
+                memories={surprise.memories || []}
+                polaroidStyle={theme.toggles?.polaroidStyle}
+                accentColor={theme.primaryColor}
+              />
+            </section>
 
-            <MemoryGallery
-              memories={surprise.memories}
-              polaroidStyle={theme.toggles?.polaroidStyle}
-              accentColor={theme.primaryColor}
-            />
-          </section>
-        )}
+            {/* Games */}
+            <section className="p-6 rounded-3xl bg-slate-900/90 border border-white/10">
+              <SpecialFeatures
+                specialSettings={surprise.specialSettings}
+                accentColor={theme.primaryColor}
+              />
+            </section>
 
-        {/* SPECIAL INTERACTIVE FEATURES (Balloon game, wheel, scratch card, quiz, gift reveal) */}
-        {surprise.specialSettings && (
-          <SpecialFeatures
-            specialSettings={surprise.specialSettings}
-            accentColor={theme.primaryColor}
-          />
-        )}
+            {/* Personal Letter */}
+            {surprise.personalLetter && (
+              <section className="p-8 rounded-3xl bg-slate-900/90 border border-white/10 space-y-4">
+                <h3 className="text-xl font-bold text-white">Personal Letter:</h3>
+                <p className="text-base text-slate-200 leading-relaxed font-outfit whitespace-pre-line">
+                  {surprise.personalLetter}
+                </p>
+                <p className="text-right font-caveat text-2xl text-amber-300 font-bold">
+                  With love, {surprise.senderName} ❤️
+                </p>
+              </section>
+            )}
 
-        {/* REACTIONS BAR */}
-        <section className="py-4 text-center space-y-3">
-          <p className="text-xs uppercase tracking-wider font-semibold text-slate-400">
-            Send Birthday Love to {surprise.recipientName}
-          </p>
-          <ReactionBar surpriseId={surprise.id || 'preview'} reactions={surprise.reactions} />
-        </section>
+            {/* Reactions & Guestbook */}
+            <section className="space-y-6">
+              <div className="text-center">
+                <ReactionBar surpriseId={surprise.id || 'preview'} reactions={surprise.reactions} />
+              </div>
+              {surprise.guestbookEnabled && (
+                <div className="p-6 rounded-3xl bg-slate-900/90 border border-white/10">
+                  <Guestbook surpriseId={surprise.id || 'preview'} accentColor={theme.primaryColor} />
+                </div>
+              )}
+            </section>
 
-        {/* GUESTBOOK */}
-        {surprise.guestbookEnabled && (
-          <section className="pt-6 border-t border-white/10">
-            <Guestbook surpriseId={surprise.id || 'preview'} accentColor={theme.primaryColor} />
-          </section>
-        )}
+            {/* Share */}
+            <section className="p-6 rounded-3xl bg-slate-900/90 border border-white/10 space-y-4">
+              <h3 className="text-lg font-bold text-white text-center">Share This Birthday Universe</h3>
+              <ShareActions
+                slug={surprise.slug}
+                recipientName={surprise.recipientName}
+                senderName={surprise.senderName}
+              />
+            </section>
 
-        {/* SHARE THIS SURPRISE ON WHATSAPP, INSTAGRAM, ETC. */}
-        <section className="pt-8 border-t border-white/10 space-y-4">
-          <div className="text-center space-y-1">
-            <h3 className="text-lg font-bold text-white flex items-center justify-center gap-2">
-              <Share2 className="w-5 h-5 text-amber-400" />
-              Share this Birthday Surprise
-            </h3>
-            <p className="text-xs text-slate-400">
-              Share the magic with friends & family on WhatsApp, Instagram, Telegram & more!
-            </p>
+            {/* Footer */}
+            <footer className="text-center pt-8 border-t border-white/10 space-y-3">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-amber-500/30 text-xs text-amber-300 font-semibold shadow-lg">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Made with ❤️ by RAM</span>
+              </div>
+              <p className="text-xs text-slate-500">WishVerse • Turn a birthday wish into a whole universe</p>
+            </footer>
           </div>
-          <ShareActions
-            slug={surprise.slug}
-            recipientName={surprise.recipientName}
-            senderName={surprise.senderName}
-            className="max-w-xl mx-auto"
-          />
-        </section>
-
-        {/* FINAL SENDER SIGNATURE & MADE BY RAM FOOTER */}
-        <footer className="text-center pt-10 space-y-6 border-t border-white/10">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-widest text-slate-400">Made with infinite love</p>
-            <p className="text-2xl sm:text-3xl font-caveat font-bold text-amber-300">
-              With lots of love, {surprise.senderName} ❤️
-            </p>
-          </div>
-
-          {/* Made by RAM Signature Pill */}
-          <div className="flex flex-col items-center justify-center gap-2 pt-2">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-amber-500/30 text-xs text-amber-300 font-semibold shadow-lg shadow-amber-500/10">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Made with ❤️ by RAM</span>
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">
-              WishVerse • Magical Birthday Surprises
-            </p>
-          </div>
-
-          <div className="pt-4">
-            <a
-              href="/"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-xs sm:text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700 border border-white/15 shadow-xl transition cursor-pointer"
-            >
-              <span>Turn a birthday wish into a whole universe with WishVerse →</span>
-            </a>
-          </div>
-        </footer>
+        )}
       </main>
+
+      {/* Floating Bottom Navigation Bar for Story Mode */}
+      {viewMode === 'story' && isRevealed && (
+        <nav
+          aria-label="Story Chapter Navigation"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-slate-950/90 backdrop-blur-xl border border-white/15 px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-3 text-xs"
+        >
+          <button
+            type="button"
+            disabled={currentChapter === 1}
+            onClick={() => goToChapter(currentChapter - 1)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-900 text-slate-300 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Back</span>
+          </button>
+
+          <span className="text-slate-400 font-medium px-2">
+            Chapter <strong className="text-white">{currentChapter}</strong> of {CHAPTERS.length}
+          </span>
+
+          <button
+            type="button"
+            disabled={currentChapter === CHAPTERS.length}
+            onClick={() => goToChapter(currentChapter + 1)}
+            className="flex items-center gap-1 px-4 py-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer shadow-md shadow-amber-500/20"
+          >
+            <span>Next</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </nav>
+      )}
     </div>
   );
 };
