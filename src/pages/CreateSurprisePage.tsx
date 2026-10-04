@@ -263,6 +263,11 @@ export const CreateSurprisePage: React.FC = () => {
       return;
     }
 
+    if (!user) {
+      setPublishError('Please sign in with Google before publishing. Your draft is still saved.');
+      return;
+    }
+
     setPublishing(true);
     const generatedSlug = generateRandomSlug();
     let audioUploadFailed = false;
@@ -935,13 +940,13 @@ export const CreateSurprisePage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Instant Publishing Banner (No Sign-In Required!) */}
+              {/* Publishing requires an authenticated owner. */}
               <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-rose-500/10 border border-emerald-500/30 text-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                   <div>
-                    <span className="font-bold text-white block text-sm">Instant 1-Click Publishing Ready!</span>
-                    <span className="text-slate-400 text-xs">No sign-in or account needed. You can publish and share immediately.</span>
+                    <span className="font-bold text-white block text-sm">Sign in to publish</span>
+                    <span className="text-slate-400 text-xs">Your draft stays saved while you sign in with Google.</span>
                   </div>
                 </div>
                 {!user ? (
@@ -950,7 +955,7 @@ export const CreateSurprisePage: React.FC = () => {
                     onClick={signInWithGoogle}
                     className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 text-xs font-medium transition cursor-pointer shrink-0"
                   >
-                    <LogIn className="w-3.5 h-3.5 text-amber-400" /> Optional: Sign In
+                    <LogIn className="w-3.5 h-3.5 text-amber-400" /> Sign In with Google
                   </button>
                 ) : (
                   <div className="flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20">
@@ -979,7 +984,7 @@ export const CreateSurprisePage: React.FC = () => {
                     ? `Uploading music ${musicUploadProgress}%...`
                     : publishing
                     ? 'Publishing Your Birthday Universe...'
-                    : 'Publish Birthday Surprise 🎉 (No Sign-In Required)'}
+                    : user ? 'Publish Birthday Surprise 🎉' : 'Sign In to Publish'}
                 </button>
 
                 <p className="text-xs text-slate-400 flex items-center gap-1.5 pt-1">

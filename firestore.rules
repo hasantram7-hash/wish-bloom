@@ -1,23 +1,66 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsSurprise() {
+      return signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    function incrementsReaction(emoji) {
+      let changedReactions = request.resource.data.reactions.diff(resource.data.reactions).affectedKeys();
+      return changedReactions.size() == 1
+        && changedReactions.hasOnly([emoji])
+        && request.resource.data.reactions.get(emoji, 0) == resource.data.reactions.get(emoji, 0) + 1;
+    }
+
+    function incrementsOneAllowedReaction() {
+      return request.resource.data.reactions is map
+        && resource.data.reactions is map
+        && (
+          incrementsReaction('❤️')
+          || incrementsReaction('🎉')
+          || incrementsReaction('🥹')
+          || incrementsReaction('😍')
+          || incrementsReaction('😂')
+        );
+    }
+
+    function updatesOnlyPublicMetrics() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return (changed.size() == 1
+          && changed.hasOnly(['viewCount'])
+          && request.resource.data.viewCount == resource.data.viewCount + 1)
+        || (changed.size() == 1
+          && changed.hasOnly(['reactions'])
+          && incrementsOneAllowedReaction());
+    }
 
     match /birthdaySurprises/{surpriseId} {
-      // Allow everyone to read surprises (recipients, friends, creators)
       allow read: if true;
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if ownsSurprise() || updatesOnlyPublicMetrics();
+      allow delete: if ownsSurprise();
 
-      // Allow creating surprises without login wall
-      allow create: if true;
-
-      // Allow updates (reactions, view counts, creator edits)
-      allow update: if true;
-
-      // Allow delete
-      allow delete: if true;
-
-      // Guestbook subcollection
       match /guestbook/{entryId} {
-        allow read, create, update, delete: if true;
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasOnly([
+            'authorId', 'authorName', 'message', 'emoji', 'createdAt'
+          ])
+          && request.resource.data.authorId is string
+          && request.resource.data.authorName is string
+          && request.resource.data.authorName.size() > 0
+          && request.resource.data.authorName.size() <= 50
+          && request.resource.data.message is string
+          && request.resource.data.message.size() > 0
+          && request.resource.data.message.size() <= 300
+          && request.resource.data.emoji is string
+          && request.resource.data.createdAt == request.time;
+        allow delete: if signedIn()
+          && (resource.data.authorId == request.auth.uid
+            || get(/databases/$(database)/documents/birthdaySurprises/$(surpriseId)).data.ownerId == request.auth.uid);
       }
     }
 
