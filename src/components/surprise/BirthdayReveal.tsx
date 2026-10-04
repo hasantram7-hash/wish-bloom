@@ -29,6 +29,7 @@ import { Guestbook } from '../guestbook/Guestbook';
 import { SpecialFeatures } from './SpecialFeatures';
 import { ShareActions } from '../share/ShareActions';
 import { recordSurpriseView } from '../../services/firestoreService';
+import { BirthdayWrapped } from './BirthdayWrapped';
 
 interface BirthdayRevealProps {
   surprise: BirthdaySurprise;
@@ -276,6 +277,22 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
           </button>
         </div>
       </div>
+    );
+  }
+
+  if (surprise.theme.templateId === 'birthday-wrapped') {
+    return (
+      <BirthdayWrapped
+        surprise={surprise}
+        cakeConfig={cakeConfig}
+        audioPlaying={audioPlaying}
+        onOpened={() => {
+          setIsRevealed(true);
+          setViewMode('scroll');
+        }}
+        onToggleAudio={toggleAudio}
+        onCandlesBlown={() => setCandlesBlownOut(true)}
+      />
     );
   }
 

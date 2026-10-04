@@ -29,7 +29,7 @@ export const TemplatesPage: React.FC = () => {
         <div className="text-center max-w-2xl mx-auto space-y-3">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>10 Bespoke Birthday Themes</span>
+            <span>{BIRTHDAY_TEMPLATES.length} Bespoke Birthday Themes</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-black text-white">
             Explore Birthday Templates
