@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "BirthdaySurprise": {
+      "title": "BirthdaySurprise",
+      "description": "Represents a personalized birthday surprise website created by an authenticated user",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string", "minLength": 16, "maxLength": 64 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "ownerDisplayName": { "type": "string", "maxLength": 100 },
+        "recipientName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "recipientNickname": { "type": "string", "maxLength": 60 },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "relationship": { "type": "string", "maxLength": 40 },
+        "birthdayDate": { "type": "string", "maxLength": 40 },
+        "greetingLanguage": { "type": "string", "maxLength": 30 },
+        "customTitle": { "type": "string", "maxLength": 120 },
+        "message": { "type": "string", "minLength": 5, "maxLength": 2000 },
+        "quote": { "type": "string", "maxLength": 300 },
+        "reasons": { "type": "array" },
+        "wishes": { "type": "array" },
+        "memories": { "type": "array" },
+        "cake": { "type": "object" },
+        "theme": { "type": "object" },
+        "music": { "type": "object" },
+        "specialSettings": { "type": "object" },
+        "guestbookEnabled": { "type": "boolean" },
+        "viewCount": { "type": "number" },
+        "reactions": { "type": "object" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["slug", "ownerId", "recipientName", "senderName", "message", "isActive"]
+    },
+    "GuestbookEntry": {
+      "title": "GuestbookEntry",
+      "description": "Heartfelt birthday message left by a visitor or friend",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 50 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "emoji": { "type": "string", "maxLength": 10 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorName", "message", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/birthdaySurprises/{surpriseId}": {
+      "schema": { "$ref": "#/entities/BirthdaySurprise" },
+      "description": "Primary storage of all created birthday surprises"
+    },
+    "/birthdaySurprises/{surpriseId}/guestbook/{entryId}": {
+      "schema": { "$ref": "#/entities/GuestbookEntry" },
+      "description": "Subcollection containing guestbook greetings left on a surprise"
+    }
+  }
+}

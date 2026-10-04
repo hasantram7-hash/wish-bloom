@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidSurprise(data) {
+      return data.keys().hasAll(['slug', 'ownerId', 'recipientName', 'senderName', 'message', 'isActive'])
+        && data.slug is string && data.slug.size() >= 8 && data.slug.size() <= 64
+        && data.ownerId is string && data.ownerId.size() <= 128
+        && data.recipientName is string && data.recipientName.size() >= 1 && data.recipientName.size() <= 60
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 5000
+        && data.isActive is bool;
+    }
+
+    function isPubliclyAccessible(surpriseData) {
+      return surpriseData.isActive == true
+        && (!('scheduledUnlockAt' in surpriseData.specialSettings) || surpriseData.specialSettings.scheduledUnlockAt == null || request.time >= surpriseData.specialSettings.scheduledUnlockAt)
+        && (!('expiresAt' in surpriseData.specialSettings) || surpriseData.specialSettings.expiresAt == null || request.time <= surpriseData.specialSettings.expiresAt);
+    }
+
+    // Birthday surprises collection
+    match /birthdaySurprises/{surpriseId} {
+      // Direct get access: owner can view, active surprises are viewable publicly
+      allow get: if isOwner(resource.data.ownerId) || isPubliclyAccessible(resource.data) || resource.data.isActive == true;
+
+      // List queries: authenticated owners can list their own surprises; public queries restricted to active surprises
+      allow list: if (isSignedIn() && resource.data.ownerId == request.auth.uid)
+                  || (resource.data.isActive == true);
+
+      // Create: user can create with Google account OR publish instantly without sign-in as guest
+      allow create: if isValidSurprise(request.resource.data)
+                    && (
+                      (isSignedIn() && request.resource.data.ownerId == request.auth.uid)
+                      || (!isSignedIn() && request.resource.data.ownerId is string && request.resource.data.ownerId.size() <= 128)
+                    );
+
+      // Update:
+      // Case 1: Owner editing surprise content
+      // Case 2: Public interaction (reactions and view counts only)
+      // Case 3: Creator updating their surprise with matching ownerId
+      allow update: if (
+        isOwner(resource.data.ownerId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && isValidSurprise(request.resource.data)
+      ) || (
+        resource.data.isActive == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'viewCount'])
+      ) || (
+        request.resource.data.ownerId == resource.data.ownerId
+        && isValidSurprise(request.resource.data)
+      );
+
+      // Delete: Owner or signed-in user or matching creator
+      allow delete: if isOwner(resource.data.ownerId) || (request.auth != null && request.auth.uid == resource.data.ownerId);
+
+      // Guestbook subcollection
+      match /guestbook/{entryId} {
+        // Read if parent surprise is accessible and guestbook is enabled
+        allow read: if isOwner(get(/databases/$(database)/documents/birthdaySurprises/$(surpriseId)).data.ownerId)
+                    || (
+                      get(/databases/$(database)/documents/birthdaySurprises/$(surpriseId)).data.guestbookEnabled == true
+                      && isPubliclyAccessible(get(/databases/$(database)/documents/birthdaySurprises/$(surpriseId)).data)
+                    );
+
+        // Create: authenticated users or guest visitors, validated fields
+        allow create: if request.resource.data.authorName is string
+                      && request.resource.data.authorName.size() >= 1
+                      && request.resource.data.authorName.size() <= 50
+                      && request.resource.data.message is string
+                      && request.resource.data.message.size() >= 1
+                      && request.resource.data.message.size() <= 300;
+
+        // Delete: author of the entry or owner of the surprise
+        allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid)
+                      || isOwner(get(/databases/$(database)/documents/birthdaySurprises/$(surpriseId)).data.ownerId);
+
+        allow update: if false;
+      }
+    }
+  }
+}

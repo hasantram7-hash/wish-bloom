@@ -1,0 +1,6 @@
+{
+  "name": "WishVerse",
+  "description": "Create and share magical, personalized cinematic birthday surprises with custom cakes, photos, music, wishes, and interactive reveals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
