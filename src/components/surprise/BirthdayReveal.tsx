@@ -64,6 +64,23 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
 
   // Audio synthesis
   const audioContextRef = useRef<AudioContext | null>(null);
+  const uploadedMusicRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audioPath = surprise.music?.audioPath;
+    if (!audioPath) return;
+
+    const player = new Audio(audioPath);
+    player.loop = true;
+    player.preload = 'none';
+    uploadedMusicRef.current = player;
+
+    return () => {
+      player.pause();
+      player.src = '';
+      if (uploadedMusicRef.current === player) uploadedMusicRef.current = null;
+    };
+  }, [surprise.music?.audioPath]);
 
   // Record view on recipient open
   useEffect(() => {
@@ -135,8 +152,15 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
     });
 
     if (surprise.music?.enabled) {
-      setAudioPlaying(true);
-      playSynthesizedBirthdayMelody();
+      if (surprise.music.audioPath) {
+        const player = uploadedMusicRef.current;
+        if (player) {
+          player.play().then(() => setAudioPlaying(true)).catch(() => setAudioPlaying(false));
+        }
+      } else {
+        setAudioPlaying(true);
+        playSynthesizedBirthdayMelody();
+      }
     }
   };
 
@@ -154,6 +178,18 @@ export const BirthdayReveal: React.FC<BirthdayRevealProps> = ({
   };
 
   const toggleAudio = () => {
+    if (surprise.music?.audioPath) {
+      const player = uploadedMusicRef.current;
+      if (!player) return;
+      if (audioPlaying) {
+        player.pause();
+        setAudioPlaying(false);
+      } else {
+        player.play().then(() => setAudioPlaying(true)).catch(() => setAudioPlaying(false));
+      }
+      return;
+    }
+
     if (!audioPlaying) {
       setAudioPlaying(true);
       playSynthesizedBirthdayMelody();

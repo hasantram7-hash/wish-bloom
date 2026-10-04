@@ -16,6 +16,7 @@ import {
   Send,
   Plus,
   Trash2,
+  Music2,
   LogIn,
   Heart,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ import {
   BirthdaySurprise,
   MemoryItem,
   QuizQuestion,
+  MusicConfig,
   SpecialSettings,
   SurpriseTheme,
 } from '../types/birthday';
@@ -33,6 +35,7 @@ import { CakeCustomizer } from '../components/cake/CakeCustomizer';
 import { BirthdayReveal } from '../components/surprise/BirthdayReveal';
 import { useAuth } from '../contexts/AuthContext';
 import { createSurprise, generateRandomSlug } from '../services/firestoreService';
+import { getAudioFileError, uploadAudioFile } from '../services/storageService';
 
 const WIZARD_STEPS = [
   { id: 1, title: 'Details', icon: Sparkles },
@@ -104,6 +107,12 @@ export const CreateSurprisePage: React.FC = () => {
   const [customTitle, setCustomTitle] = useState('Happy Birthday to My Best Friend!');
 
   const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [musicMood, setMusicMood] = useState<MusicConfig['mood']>('happy');
+  const [musicFile, setMusicFile] = useState<File | null>(null);
+  const [musicPreviewUrl, setMusicPreviewUrl] = useState<string | null>(null);
+  const [musicUploadProgress, setMusicUploadProgress] = useState<number | null>(null);
+  const [musicUploadError, setMusicUploadError] = useState<string | null>(null);
 
   const [message, setMessage] = useState(
     "Happy Birthday! You bring so much energy, laughter, and wisdom to everyone around you. Thank you for being such an authentic, incredible soul. I hope this birthday universe reminds you of how cherished you are!"
@@ -159,6 +168,16 @@ export const CreateSurprisePage: React.FC = () => {
   });
 
   const [theme, setTheme] = useState<SurpriseTheme>(defaultTemplate.themeDefaults);
+
+  useEffect(() => {
+    if (!musicFile) {
+      setMusicPreviewUrl(null);
+      return;
+    }
+    const previewUrl = URL.createObjectURL(musicFile);
+    setMusicPreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [musicFile]);
 
   const [specialSettings, setSpecialSettings] = useState<SpecialSettings>({
     scheduledUnlockAt: null,
@@ -246,6 +265,7 @@ export const CreateSurprisePage: React.FC = () => {
 
     setPublishing(true);
     const generatedSlug = generateRandomSlug();
+    let audioUploadFailed = false;
     try {
       const creatorId = user ? user.uid : (guestId || `guest_${Date.now()}`);
       const creatorName = user ? (user.displayName || user.email || senderName.trim()) : senderName.trim();
@@ -255,6 +275,24 @@ export const CreateSurprisePage: React.FC = () => {
         const { file, ...rest } = m;
         return rest;
       });
+
+      let audioPath: string | null = null;
+      if (musicEnabled && musicFile) {
+        setMusicUploadError(null);
+        setMusicUploadProgress(0);
+        try {
+          const uploadedAudio = await uploadAudioFile(
+            creatorId,
+            generatedSlug,
+            musicFile,
+            setMusicUploadProgress
+          );
+          audioPath = uploadedAudio.downloadUrl;
+        } catch (error) {
+          audioUploadFailed = true;
+          throw error;
+        }
+      }
 
       const surpriseData: Omit<BirthdaySurprise, 'id' | 'createdAt' | 'updatedAt'> = {
         slug: generatedSlug,
@@ -276,8 +314,9 @@ export const CreateSurprisePage: React.FC = () => {
         cake: cakeConfig,
         theme,
         music: {
-          enabled: true,
-          mood: 'happy',
+          enabled: musicEnabled,
+          mood: musicMood,
+          audioPath,
         },
         specialSettings,
         guestbookEnabled: true,
@@ -299,7 +338,12 @@ export const CreateSurprisePage: React.FC = () => {
     } catch (err: unknown) {
       console.warn('Publish error recovery:', err);
       setPublishError('Could not save this surprise online. Your draft is still here; check your connection and try publishing again.');
+      if (audioUploadFailed) {
+        setMusicUploadError('Music upload failed. Check your connection and try publishing again.');
+        setPublishError('Your music could not be uploaded, so the surprise was not published. Your draft is still here.');
+      }
     } finally {
+      setMusicUploadProgress(null);
       setPublishing(false);
     }
   };
@@ -712,6 +756,72 @@ export const CreateSurprisePage: React.FC = () => {
                   </label>
                 </div>
               </div>
+
+              <div className="pt-5 border-t border-white/10 space-y-3">
+                <h4 className="flex items-center gap-2 text-sm font-bold text-white">
+                  <Music2 className="w-4 h-4 text-amber-400" />
+                  Birthday Music
+                </h4>
+                <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={musicEnabled}
+                    onChange={(event) => setMusicEnabled(event.target.checked)}
+                    className="w-4 h-4 rounded text-amber-500 focus:ring-0"
+                  />
+                  Play music in the surprise
+                </label>
+                {musicEnabled && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Music mood
+                      <select
+                        value={musicMood}
+                        onChange={(event) => setMusicMood(event.target.value as MusicConfig['mood'])}
+                        className="mt-1.5 w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                      >
+                        <option value="happy">Happy</option>
+                        <option value="soft">Soft</option>
+                        <option value="romantic">Romantic</option>
+                        <option value="party">Party</option>
+                      </select>
+                    </label>
+                    <div>
+                      <label htmlFor="birthday-music-file" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Add your own song
+                      </label>
+                      <input
+                        key={musicFile?.name || 'empty-audio'}
+                        id="birthday-music-file"
+                        type="file"
+                        accept=".mp3,.wav,.ogg,.m4a,.aac,.webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/webm"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] || null;
+                          const error = file ? getAudioFileError(file) : null;
+                          setMusicUploadError(error);
+                          setMusicFile(error ? null : file);
+                        }}
+                        className="block w-full text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-400 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-950 hover:file:bg-amber-300"
+                      />
+                      <p className="mt-1.5 text-[10px] text-slate-500">MP3, WAV, OGG, M4A, AAC, or WEBM • up to 20 MB</p>
+                    </div>
+                    {musicFile && musicPreviewUrl && (
+                      <div className="sm:col-span-2 space-y-2">
+                        <p className="truncate text-xs text-emerald-300">Selected: {musicFile.name}</p>
+                        <audio src={musicPreviewUrl} controls preload="metadata" className="w-full h-10" />
+                        <button
+                          type="button"
+                          onClick={() => setMusicFile(null)}
+                          className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+                        >
+                          Remove selected song
+                        </button>
+                      </div>
+                    )}
+                    {musicUploadError && <p role="alert" className="sm:col-span-2 text-xs text-rose-300">{musicUploadError}</p>}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -865,7 +975,11 @@ export const CreateSurprisePage: React.FC = () => {
                   className="w-full py-4 px-8 rounded-full font-black text-sm uppercase tracking-wider text-slate-950 bg-gradient-to-r from-amber-400 via-rose-400 to-amber-300 hover:from-amber-300 hover:to-rose-300 shadow-xl shadow-amber-500/25 active:scale-95 disabled:opacity-50 transition cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Send className="w-4 h-4" />
-                  {publishing ? 'Publishing Your Birthday Universe...' : 'Publish Birthday Surprise 🎉 (No Sign-In Required)'}
+                  {musicUploadProgress !== null
+                    ? `Uploading music ${musicUploadProgress}%...`
+                    : publishing
+                    ? 'Publishing Your Birthday Universe...'
+                    : 'Publish Birthday Surprise 🎉 (No Sign-In Required)'}
                 </button>
 
                 <p className="text-xs text-slate-400 flex items-center gap-1.5 pt-1">

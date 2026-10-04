@@ -12,9 +12,30 @@ export interface UploadResult {
 
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 export const MAX_VIDEO_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
+export const MAX_AUDIO_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 export const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm'];
+const AUDIO_CONTENT_TYPES: Record<string, string> = {
+  aac: 'audio/aac',
+  m4a: 'audio/mp4',
+  mp3: 'audio/mpeg',
+  ogg: 'audio/ogg',
+  wav: 'audio/wav',
+  webm: 'audio/webm',
+};
+
+export function getAudioFileError(file: File): string | null {
+  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  const supportedType = Object.values(AUDIO_CONTENT_TYPES).includes(file.type);
+  if (!supportedType && !AUDIO_CONTENT_TYPES[extension]) {
+    return 'Choose an MP3, WAV, OGG, M4A, AAC, or WEBM audio file.';
+  }
+  if (file.size > MAX_AUDIO_SIZE_BYTES) {
+    return `Audio files must be 20 MB or smaller. This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB.`;
+  }
+  return null;
+}
 
 export function validateFile(file: File): { valid: boolean; error?: string; type: 'image' | 'video' } {
   if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -78,6 +99,51 @@ export function uploadMediaFile(
           resolve({ downloadUrl, storagePath });
         } catch (urlError) {
           reject(urlError);
+        }
+      }
+    );
+  });
+}
+
+export function uploadAudioFile(
+  userId: string,
+  surpriseId: string,
+  file: File,
+  onProgress?: UploadProgressCallback
+): Promise<UploadResult> {
+  return new Promise((resolve, reject) => {
+    const validationError = getAudioFileError(file);
+    if (validationError) {
+      reject(new Error(validationError));
+      return;
+    }
+
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    const contentType = AUDIO_CONTENT_TYPES[extension] || file.type;
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `birthday-surprises/${userId}/${surpriseId}/audio/${Date.now()}_${sanitizedFileName}`;
+    const storageReference = ref(storage, storagePath);
+    const uploadTask = uploadBytesResumable(storageReference, file, {
+      contentType,
+      customMetadata: {
+        originalName: file.name,
+        uploadedAt: new Date().toISOString(),
+      },
+    });
+
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        onProgress?.(progress);
+      },
+      reject,
+      async () => {
+        try {
+          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve({ downloadUrl, storagePath });
+        } catch (error) {
+          reject(error);
         }
       }
     );
